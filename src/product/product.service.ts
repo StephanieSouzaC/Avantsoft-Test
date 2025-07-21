@@ -3,8 +3,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { getMissingLetter } from './utils/missing-letter.util';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from 'src/prisma.service';
+import { PrismaService } from '../prisma.service';
 
 @Injectable()
 export class ProductService {
@@ -13,15 +12,10 @@ export class ProductService {
     async create(data: CreateProductDto) {
         try {
             return await this.prisma.product.create({ data });
-        }
-        catch (error) {
-            if (
-                error instanceof PrismaClientKnownRequestError &&
-                error.code === 'P2002'
-            ) {
+        } catch (error) {
+            if (error?.code === 'P2002') {
                 throw new ConflictException('SKU already exists');
             }
-
             throw new BadRequestException('Could not create product');
         }
     }
@@ -49,19 +43,25 @@ export class ProductService {
 
     async update(id: number, data: UpdateProductDto) {
         try {
+            if (data.sku) {
+                const existingProduct = await this.prisma.product.findUnique({
+                    where: { sku: data.sku },
+                });
+
+                if (existingProduct && existingProduct.id !== id) {
+                    throw new ConflictException('SKU already exists');
+                }
+            }
+
             return await this.prisma.product.update({
                 where: { id },
                 data,
             });
         } catch (error) {
-            if (
-                error instanceof PrismaClientKnownRequestError &&
-                error.code === 'P2002'
-            ) {
-                throw new ConflictException('SKU already exists');
+            if (error instanceof ConflictException) {
+                throw error;
             }
-
-            throw new BadRequestException('Could not create product');
+            throw new BadRequestException('Could not update product');
         }
     }
 
